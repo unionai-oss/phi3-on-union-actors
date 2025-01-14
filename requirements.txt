@@ -1,0 +1,8 @@
+union==0.1.126
+flytekit==1.14.3
+python-dotenv==1.0.1
+gradio==5.6.0
+transformers==4.48.0
+sentence-transformers==3.3.1
+torch==2.4.1
+accelerate==0.26.0
