@@ -1,4 +1,4 @@
-from tasks.phi3 import inference, download_model
+from tasks.hf_model import inference, download_model
 from flytekit import workflow
 
 # --------------------------------
@@ -6,7 +6,7 @@ from flytekit import workflow
 # --------------------------------
 
 @workflow
-def phi_text_gen_workflow(query: str = "Hello",
+def wf_text_gen(query: str = "Hello",
                         model_name: str = "microsoft/Phi-3-mini-128k-instruct") -> str:
     model_cache_path = download_model(model_name=model_name)
     result = inference(query=query,
@@ -15,4 +15,5 @@ def phi_text_gen_workflow(query: str = "Hello",
 
     return result
 
-#union run --remote workflows/phi3_response_wf.py phi_text_gen_workflow --query="what is a fish?"
+#union run --remote workflows/model_infernce.py wf_text_gen --query="what is a fish?"
+#union register workflows/model_infernce.py 
