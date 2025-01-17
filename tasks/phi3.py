@@ -6,28 +6,57 @@ from functools import partial
 import union
 from transformers import AutoTokenizer, AutoModel
 from typing import Annotated
-from containers import actor
+from containers import actor, image
 
-from flytekit import ImageSpec
+from flytekit import ImageSpec, task , current_context  
 from flytekit import Resources
+from pathlib import Path
 
+# --------------------------------
+# Download LLM model from Hugging Face
+# --------------------------------
+@task(
+    container_image=image,
+    cache=True,
+    cache_version="0.001",
+    requests=Resources(cpu="2", mem="4Gi"),
+)
+def download_model(model_name: str) -> FlyteDirectory:
+    
+    working_dir = Path(current_context().working_directory)
+    model_cache_dir = working_dir / "model_cache"
+    
+    # Load the model and tokenizer
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        device_map="cpu",
+        torch_dtype="auto",
+        trust_remote_code=True,
+        cache_dir=model_cache_dir,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=model_cache_dir
+    )
+
+    return FlyteDirectory(model_cache_dir)
 
 # --------------------------------
 # Load the LLM model as cache for actor
 # --------------------------------
 @union.actor_cache
-def load_model():
+def load_model(model_name:str, model_cache_path: FlyteDirectory) -> pipeline:
     # Load the model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(
-        "microsoft/Phi-3-mini-128k-instruct",
+        model_name,
         device_map="cuda",
         torch_dtype="auto",
         trust_remote_code=True,
-        # cache_dir=cache_path,
+        cache_dir=model_cache_path,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        "microsoft/Phi-3-mini-128k-instruct",
-        # cache_dir=cache_path
+        model_name,
+        cache_dir=model_cache_path
     )
 
     return pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -36,9 +65,9 @@ def load_model():
 # Inference task for LLM & Vector DB
 # --------------------------------
 @actor.task
-def inference(query: str ="hello" ) -> str:
+def inference(query: str, model_name: str, model_cache_path: FlyteDirectory ) -> str:
 
-  text_gen_pipeline = load_model()
+  text_gen_pipeline = load_model(model_name, model_cache_path)
 
   # Generate a response
   messages = [
