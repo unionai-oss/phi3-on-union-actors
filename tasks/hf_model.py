@@ -8,7 +8,7 @@ from transformers import AutoTokenizer, AutoModel
 from typing import Annotated
 from containers import actor, image
 
-from flytekit import ImageSpec, task , current_context  
+from flytekit import task , current_context  
 from flytekit import Resources
 from pathlib import Path
 
@@ -18,13 +18,14 @@ from pathlib import Path
 @task(
     container_image=image,
     cache=True,
-    cache_version="0.001",
-    requests=Resources(cpu="2", mem="4Gi"),
+    cache_version="0.007",
+    enable_deck=True,
+    requests=Resources(cpu="2", mem="8Gi"),
 )
 def download_model(model_name: str) -> FlyteDirectory:
     
     working_dir = Path(current_context().working_directory)
-    model_cache_dir = working_dir / "model_cache"
+    saved_model_dir = working_dir / "saved_model"
     
     # Load the model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(
@@ -32,31 +33,32 @@ def download_model(model_name: str) -> FlyteDirectory:
         device_map="cpu",
         torch_dtype="auto",
         trust_remote_code=True,
-        cache_dir=model_cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
-        cache_dir=model_cache_dir
     )
 
-    return FlyteDirectory(model_cache_dir)
+    model.save_pretrained(saved_model_dir)
+    tokenizer.save_pretrained(saved_model_dir)
+
+    return FlyteDirectory(saved_model_dir)
 
 # --------------------------------
 # Load the LLM model as cache for actor
 # --------------------------------
 @union.actor_cache
-def load_model(model_name:str, model_cache_path: FlyteDirectory) -> pipeline:
+def load_model(model_name:str, model_dir: FlyteDirectory) -> pipeline:
     # Load the model and tokenizer
+    model_dir = model_dir.download()
+
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        model_dir,
         device_map="cuda",
         torch_dtype="auto",
         trust_remote_code=True,
-        cache_dir=model_cache_path,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        cache_dir=model_cache_path
+        model_dir
     )
 
     return pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -64,10 +66,10 @@ def load_model(model_name:str, model_cache_path: FlyteDirectory) -> pipeline:
 # --------------------------------
 # Inference task for LLM & Vector DB
 # --------------------------------
-@actor.task
-def inference(query: str, model_name: str, model_cache_path: FlyteDirectory ) -> str:
+@actor.task(enable_deck=True,)
+def inference(query: str, model_name: str, model_dir: FlyteDirectory ) -> str:
 
-  text_gen_pipeline = load_model(model_name, model_cache_path)
+  text_gen_pipeline = load_model(model_name=model_name, model_dir=model_dir)
 
   # Generate a response
   messages = [
