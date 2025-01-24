@@ -8,10 +8,10 @@ from flytekit import workflow
 @workflow
 def wf_text_gen(query: str = "Hello",
                         model_name: str = "microsoft/Phi-3-mini-128k-instruct") -> str:
-    model_cache_path = download_model(model_name=model_name)
+    model_dir = download_model(model_name=model_name)
     result = inference(query=query,
                        model_name=model_name,
-                       model_cache_path=model_cache_path)
+                       model_dir=model_dir)
 
     return result
 
